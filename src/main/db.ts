@@ -9,18 +9,37 @@ const ARTICLES_FILE = path.join(DATA_DIR, 'articles.json')
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json')
 
 const DEFAULT_SOURCES: RssSource[] = [
-  { id: 'reuters', name: 'Reuters', url: 'https://feeds.reuters.com/reuters/topNews', enabled: true },
-  { id: 'bbc', name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', enabled: true },
-  { id: 'guardian', name: 'Guardian', url: 'https://www.theguardian.com/world/rss', enabled: true },
-  { id: 'ars', name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', enabled: true },
-  { id: 'nyt', name: 'NY Times', url: 'https://rss.nytimes.com/services/xml/rss/nf/World.xml', enabled: false },
+  // India-centric sources
+  { id: 'toi-top',   name: 'Times of India',   url: 'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',           enabled: true,  defaultCategory: 'india' },
+  { id: 'thehindu',  name: 'The Hindu',        url: 'https://www.thehindu.com/news/national/feeder/default.rss',            enabled: true,  defaultCategory: 'india' },
+  { id: 'ie-india',  name: 'Indian Express',   url: 'https://indianexpress.com/section/india/feed/',                        enabled: true,  defaultCategory: 'india' },
+  { id: 'ndtv',      name: 'NDTV',             url: 'https://feeds.feedburner.com/ndtvnews-top-stories',                    enabled: true,  defaultCategory: 'india' },
+  { id: 'livemint',  name: 'Mint',             url: 'https://www.livemint.com/rss/news',                                    enabled: true,  defaultCategory: 'business' },
+  { id: 'bs-india',  name: 'Business Standard',url: 'https://www.business-standard.com/rss/latest.rss',                     enabled: true,  defaultCategory: 'business' },
+  { id: 'sci-hindu', name: 'The Hindu Sci-Tech',url: 'https://www.thehindu.com/sci-tech/feeder/default.rss',                enabled: true,  defaultCategory: 'science' },
+
+  // International
+  { id: 'reuters-world', name: 'Reuters World', url: 'https://www.reutersagency.com/feed/?best-topics=political-general&post_type=best',  enabled: true,  defaultCategory: 'world' },
+  { id: 'bbc',           name: 'BBC',           url: 'https://feeds.bbci.co.uk/news/world/rss.xml',                          enabled: true,  defaultCategory: 'world' },
+  { id: 'bbc-sci',       name: 'BBC Sci/Env',   url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml',       enabled: true,  defaultCategory: 'science' },
+  { id: 'bbc-tech',      name: 'BBC Tech',      url: 'https://feeds.bbci.co.uk/news/technology/rss.xml',                    enabled: true,  defaultCategory: 'tech' },
+  { id: 'bbc-biz',       name: 'BBC Business',  url: 'https://feeds.bbci.co.uk/news/business/rss.xml',                      enabled: true,  defaultCategory: 'business' },
+  { id: 'bbc-health',    name: 'BBC Health',    url: 'https://feeds.bbci.co.uk/news/health/rss.xml',                        enabled: true,  defaultCategory: 'health' },
+  { id: 'guardian-env',  name: 'Guardian Climate',url: 'https://www.theguardian.com/environment/climate-crisis/rss',        enabled: true,  defaultCategory: 'climate' },
+  { id: 'ars',           name: 'Ars Technica',  url: 'https://feeds.arstechnica.com/arstechnica/index',                     enabled: true,  defaultCategory: 'tech' },
+  { id: 'sciencedaily',  name: 'Science Daily', url: 'https://www.sciencedaily.com/rss/top/science.xml',                    enabled: true,  defaultCategory: 'science' },
 ]
 
 const DEFAULT_SETTINGS: Settings = {
   strictness: 'medium',
   sources: DEFAULT_SOURCES,
-  refreshIntervalMinutes: 15,
+  refreshIntervalMinutes: 30,
   lastSyncAt: null,
+  llmProvider: 'ollama',
+  ollamaUrl: 'http://localhost:11434',
+  ollamaModel: 'gemma4:e2b',
+  geminiModel: 'gemini-2.5-flash',
+  maxArticlesPerRefresh: 10,
 }
 
 function readJSON<T>(file: string, fallback: T): T {
@@ -66,7 +85,26 @@ export function markRead(id: string): Article[] {
 
 export function getSettings(): Settings {
   const saved = readJSON<Partial<Settings>>(SETTINGS_FILE, {})
-  return { ...DEFAULT_SETTINGS, ...saved, sources: saved.sources ?? DEFAULT_SETTINGS.sources }
+  const savedSources = saved.sources ?? []
+  const defaultById = new Map(DEFAULT_SOURCES.map((d) => [d.id, d]))
+  const savedIds = new Set(savedSources.map((s) => s.id))
+
+  // For each saved source, overlay any missing fields (like defaultCategory) from
+  // the default with the same id. This heals settings written by older app versions.
+  const overlaidSaved: RssSource[] = savedSources.map((s) => {
+    const def = defaultById.get(s.id)
+    if (!def) return s
+    return {
+      ...s,
+      defaultCategory: s.defaultCategory ?? def.defaultCategory,
+    }
+  })
+
+  const mergedSources: RssSource[] = [
+    ...overlaidSaved,
+    ...DEFAULT_SOURCES.filter((d) => !savedIds.has(d.id)),
+  ]
+  return { ...DEFAULT_SETTINGS, ...saved, sources: mergedSources }
 }
 
 export function saveSettings(patch: Partial<Settings>): Settings {
@@ -74,4 +112,9 @@ export function saveSettings(patch: Partial<Settings>): Settings {
   const updated = { ...current, ...patch }
   writeJSON(SETTINGS_FILE, updated)
   return updated
+}
+
+/** Reset sources to the latest defaults. Used to refresh source lists after app updates. */
+export function resetSources(): Settings {
+  return saveSettings({ sources: DEFAULT_SOURCES })
 }

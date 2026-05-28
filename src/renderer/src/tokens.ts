@@ -9,9 +9,10 @@ export const colors = {
   scrim: 'rgba(15, 23, 42, 0.40)',
 }
 
-export type CategoryKey = 'politics' | 'business' | 'tech' | 'world' | 'climate' | 'science' | 'health'
+export type CategoryKey = 'india' | 'politics' | 'business' | 'tech' | 'world' | 'climate' | 'science' | 'health'
 
 export const categoryGradient: Record<CategoryKey, [string, string]> = {
+  india:    ['#7C2D12', '#F59E0B'],
   politics: ['#1E3A8A', '#3B82F6'],
   business: ['#065F46', '#10B981'],
   tech:     ['#581C87', '#A855F7'],
@@ -30,6 +31,7 @@ export const sans = "'Inter Tight', 'Inter', system-ui, sans-serif"
 
 export const CATEGORIES = [
   { id: 'all',      label: 'All' },
+  { id: 'india',    label: 'India' },
   { id: 'politics', label: 'Politics' },
   { id: 'business', label: 'Business' },
   { id: 'tech',     label: 'Technology' },

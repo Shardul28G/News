@@ -111,13 +111,17 @@ export default function ArticleModal({ article, onClose, onOpenSource }: Props):
             </span>
           </div>
 
-          {/* Summary */}
-          <p style={{
-            fontSize: 16, lineHeight: 1.6, color: colors.ink,
-            margin: 0, textWrap: 'pretty' as never,
-          }}>
-            {article.summary}
-          </p>
+          {/* Summary — render multi-paragraph */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {article.summary.split(/\n\s*\n/).filter(Boolean).map((para, i) => (
+              <p key={i} style={{
+                fontSize: 16, lineHeight: 1.6, color: colors.ink,
+                margin: 0, textWrap: 'pretty' as never,
+              }}>
+                {para.trim()}
+              </p>
+            ))}
+          </div>
 
           {/* Disclosure */}
           <p style={{

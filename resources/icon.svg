@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Subtle vertical gradient on the square so the icon has depth at large sizes -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#F97316"/>
+      <stop offset="100%" stop-color="#EA580C"/>
+    </linearGradient>
+    <!-- Soft inner highlight, matches the hero-image radial in the design -->
+    <radialGradient id="hl" cx="0.72" cy="0.28" r="0.55">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="60%"  stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded square — radius ≈ 22% of side, same proportion as the in-app 28×28 mark (8/28) -->
+  <rect width="1024" height="1024" rx="225" ry="225" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="225" ry="225" fill="url(#hl)"/>
+
+  <!-- "R" glyph — drawn as paths so we don't depend on any installed font.
+       Glyph box ~512×640, horizontally centered (x≈256), vertically centered (y≈192). -->
+  <g transform="translate(286 200)" fill="#FFFFFF" fill-rule="evenodd">
+    <path d="
+      M 0 0
+      L 248 0
+      C 380 0, 472 92, 472 218
+      C 472 312, 418 388, 332 422
+      L 480 624
+      L 348 624
+      L 218 442
+      L 124 442
+      L 124 624
+      L 0 624
+      Z
+      M 124 110
+      L 124 332
+      L 242 332
+      C 306 332, 348 286, 348 220
+      C 348 154, 306 110, 242 110
+      Z
+    "/>
+  </g>
+</svg>

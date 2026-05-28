@@ -58,8 +58,10 @@ export default function HeroCard({ article, onClick }: Props): React.ReactElemen
         <p style={{
           marginTop: 12, marginBottom: 0, fontSize: 14,
           lineHeight: 1.55, color: colors.muted, textWrap: 'pretty' as never,
+          display: '-webkit-box', WebkitLineClamp: 4,
+          WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>
-          {article.summary}
+          {article.summary.split(/\n\s*\n/)[0]?.trim() ?? ''}
         </p>
         <div style={{
           marginTop: 'auto', paddingTop: 14,

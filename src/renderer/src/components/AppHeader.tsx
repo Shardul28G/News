@@ -6,6 +6,9 @@ interface Props {
   category: Category
   query: string
   refreshing: boolean
+  progressMsg?: string
+  llmProvider?: string
+  llmModel?: string
   onCategoryChange: (c: Category) => void
   onQueryChange: (q: string) => void
   onRefresh: () => void
@@ -13,9 +16,12 @@ interface Props {
 }
 
 export default function AppHeader({
-  category, query, refreshing,
+  category, query, refreshing, progressMsg, llmProvider, llmModel,
   onCategoryChange, onQueryChange, onRefresh, onSettingsOpen,
 }: Props): React.ReactElement {
+  const providerLabel = llmProvider === 'ollama'
+    ? `ollama · ${llmModel ?? 'local'}`
+    : `gemini · ${llmModel ?? 'cli'}`
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,7 +57,7 @@ export default function AppHeader({
             padding: '2px 8px', background: 'white',
             border: `1px solid ${colors.rule}`, borderRadius: 999,
           }}>
-            refactored · gemini
+            refactored · {providerLabel}
           </div>
         </div>
 
@@ -120,8 +126,23 @@ export default function AppHeader({
         </div>
       </div>
 
+      {/* Refresh progress strip */}
+      {refreshing && progressMsg && (
+        <div style={{
+          marginTop: 10, fontSize: 12, color: colors.accent,
+          display: 'flex', alignItems: 'center', gap: 8, fontFamily: sans,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', background: colors.accent,
+            animation: 'pulse 1.2s ease-in-out infinite',
+          }} />
+          {progressMsg}
+          <style>{`@keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }`}</style>
+        </div>
+      )}
+
       {/* Row 2 — category tabs */}
-      <div style={{ display: 'flex', gap: 4, marginTop: 14 }}>
+      <div style={{ display: 'flex', gap: 4, marginTop: 14, flexWrap: 'wrap' }}>
         {CATEGORIES.map((c) => {
           const active = c.id === category
           return (
