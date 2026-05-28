@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { registerIpc } from './ipc'
 import { runRefresh } from './rss'
 import * as db from './db'
@@ -7,7 +8,21 @@ import * as db from './db'
 let mainWindow: BrowserWindow | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
+// Resolve icon for both dev (run from project root) and packaged build.
+// In packaged builds, `process.resourcesPath` points to the app resources dir.
+function resolveIconPath(): string | undefined {
+  const candidates = [
+    join(process.resourcesPath ?? '', 'icon.ico'),
+    join(process.resourcesPath ?? '', 'icon.png'),
+    join(__dirname, '../../resources/icon.ico'),
+    join(__dirname, '../../resources/icon.png'),
+  ]
+  return candidates.find((p) => p && existsSync(p))
+}
+
 function createWindow(): void {
+  const iconPath = resolveIconPath()
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -15,6 +30,7 @@ function createWindow(): void {
     minHeight: 600,
     title: 'Reader',
     backgroundColor: '#F8FAFC',
+    ...(iconPath ? { icon: iconPath } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

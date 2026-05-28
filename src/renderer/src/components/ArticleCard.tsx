@@ -56,7 +56,7 @@ export default function ArticleCard({ article, onClick }: Props): React.ReactEle
         WebkitBoxOrient: 'vertical', overflow: 'hidden',
         textWrap: 'pretty' as never,
       }}>
-        {article.summary}
+        {article.summary.split(/\n\s*\n/)[0]?.trim() ?? ''}
       </div>
     </button>
   )

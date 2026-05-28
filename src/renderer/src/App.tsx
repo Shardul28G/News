@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { colors, sans } from './tokens'
 import { useFeedStore } from './store'
 import AppHeader from './components/AppHeader'
@@ -20,10 +20,12 @@ export default function App(): React.ReactElement {
   } = useFeedStore()
 
   const [toast, setToast] = useState<{ msg: string; type?: 'success' | 'error' } | null>(null)
+  const [progressMsg, setProgressMsg] = useState<string>('')
+
   const filtered = filteredArticles()
   const [hero, ...rest] = filtered
 
-  const showToast = (msg: string, type?: 'success' | 'error') => setToast({ msg, type })
+  const showToast = (msg: string, type?: 'success' | 'error'): void => setToast({ msg, type })
 
   // Bootstrap: load articles + settings from main process
   useEffect(() => {
@@ -34,36 +36,51 @@ export default function App(): React.ReactElement {
     window.electron.feed.onUpdate(setArticles)
     window.electron.feed.onRefreshStatus((status) => {
       setRefreshing(status.refreshing)
-      if (!status.refreshing) showToast('Feed refreshed')
-      if (status.error) showToast(status.error, 'error')
+      if (status.message) setProgressMsg(status.message)
+      if (!status.refreshing) {
+        setProgressMsg('')
+        if (status.error) showToast(status.error, 'error')
+        else if (status.message) showToast(status.message)
+        else showToast('Feed refreshed')
+      }
     })
   }, [])
 
-  const handleRefresh = () => {
+  const handleRefresh = (): void => {
     if (!isElectron || refreshing) return
     setRefreshing(true)
-    window.electron.feed.refresh().catch((err) => {
+    setProgressMsg('Starting…')
+    window.electron.feed.refresh(category).catch((err) => {
       setRefreshing(false)
+      setProgressMsg('')
       showToast(String(err), 'error')
     })
   }
 
-  const handleOpenSource = (url: string) => {
+  const handleOpenSource = (url: string): void => {
     if (isElectron) window.electron.shell.openExternal(url)
     else window.open(url, '_blank', 'noopener')
   }
 
-  const handleSelectArticle = (id: string) => {
+  const handleSelectArticle = (id: string): void => {
     setSelectedId(id)
     markRead(id)
     if (isElectron) window.electron.feed.markRead(id).catch(console.error)
   }
 
-  const handleSaveSettings = (patch: Parameters<typeof window.electron.settings.set>[0]) => {
+  const handleSaveSettings = (patch: Parameters<typeof window.electron.settings.set>[0]): void => {
     if (!isElectron) return
     window.electron.settings.set(patch).then(() => {
       window.electron.settings.get().then(setSettings).catch(console.error)
       showToast('Settings saved')
+    }).catch(console.error)
+  }
+
+  const handleResetSources = (): void => {
+    if (!isElectron) return
+    window.electron.settings.resetSources().then((s) => {
+      setSettings(s)
+      showToast('Default sources restored')
     }).catch(console.error)
   }
 
@@ -75,6 +92,9 @@ export default function App(): React.ReactElement {
         category={category}
         query={query}
         refreshing={refreshing}
+        progressMsg={progressMsg}
+        llmProvider={settings?.llmProvider}
+        llmModel={settings?.llmProvider === 'ollama' ? settings?.ollamaModel : settings?.geminiModel}
         onCategoryChange={(c: Category) => setCategory(c)}
         onQueryChange={setQuery}
         onRefresh={handleRefresh}
@@ -84,7 +104,7 @@ export default function App(): React.ReactElement {
       {/* Feed body */}
       <main style={{ flex: '1 1 auto', overflowY: 'auto', padding: '26px 36px 40px' }}>
         {filtered.length === 0 ? (
-          <EmptyState query={query} refreshing={refreshing} onRefresh={handleRefresh} />
+          <EmptyState query={query} refreshing={refreshing} progressMsg={progressMsg} onRefresh={handleRefresh} />
         ) : (
           <>
             {hero && (
@@ -114,6 +134,7 @@ export default function App(): React.ReactElement {
           settings={settings}
           onClose={() => setSettingsOpen(false)}
           onSave={handleSaveSettings}
+          onResetSources={handleResetSources}
         />
       )}
 
@@ -130,8 +151,8 @@ export default function App(): React.ReactElement {
   )
 }
 
-function EmptyState({ query, refreshing, onRefresh }: {
-  query: string; refreshing: boolean; onRefresh: () => void
+function EmptyState({ query, refreshing, progressMsg, onRefresh }: {
+  query: string; refreshing: boolean; progressMsg: string; onRefresh: () => void
 }): React.ReactElement {
   return (
     <div style={{
@@ -146,16 +167,16 @@ function EmptyState({ query, refreshing, onRefresh }: {
             <path d="M1 4v6h6" /><path d="M23 20v-6h-6" />
             <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
           </svg>
-          <div style={{ fontSize: 15, color: colors.muted }}>Fetching and refactoring articles…</div>
-          <div style={{ fontSize: 13, color: colors.dim }}>This may take a moment while Gemini rewrites each story</div>
+          <div style={{ fontSize: 15, color: colors.muted }}>
+            {progressMsg || 'Fetching and refactoring articles…'}
+          </div>
+          <div style={{ fontSize: 13, color: colors.dim }}>This may take a moment while the LLM rewrites each story</div>
         </>
       ) : query ? (
-        <>
-          <div style={{ fontSize: 15 }}>No articles match "{query}"</div>
-        </>
+        <div style={{ fontSize: 15 }}>No articles match "{query}"</div>
       ) : (
         <>
-          <div style={{ fontSize: 15 }}>No articles yet</div>
+          <div style={{ fontSize: 15 }}>No articles in this category yet</div>
           <div style={{ fontSize: 13, color: colors.dim }}>Press Refresh to fetch and neutralize the latest news</div>
           <button
             onClick={onRefresh}
