@@ -1,8 +1,8 @@
 import Parser from 'rss-parser'
 import { createHash } from 'crypto'
 import * as db from './db'
-import { refactorArticle } from './llm'
-import type { Article, RssSource } from '../shared/types'
+import { refactorArticle, clusterHeadlines, synthesizeCluster } from './llm'
+import type { Article, ArticleSource, RssSource } from '../shared/types'
 
 interface ExtendedItem {
   title?: string
@@ -178,53 +178,93 @@ export async function runRefresh(
     message: `Refactoring ${newItems.length} article${newItems.length === 1 ? '' : 's'}…`,
   })
 
-  // 3. For each, fetch full text + refactor via LLM
-  const refactored: Article[] = []
+  // 3. Enrich each new item with full article body (used for both refactor & synthesis)
+  const enriched: { raw: RawItem; src?: RssSource; body: string }[] = []
   for (let i = 0; i < newItems.length; i++) {
     const raw = newItems[i]
-    const src = sourceFor.get(raw.id)
     onStatus({
       refreshing: true,
-      message: `Refactoring ${i + 1}/${newItems.length}: ${raw.source}`,
+      message: `Fetching article ${i + 1}/${newItems.length}: ${raw.source}`,
     })
-
-    // Try to enrich with full article content
     let body = raw.rssBody
     if (body.length < 600) {
       const full = await fetchFullText(raw.sourceUrl)
       if (full) body = full
     }
     if (!body || body.length < 80) body = raw.rssTitle // last resort
+    enriched.push({ raw, src: sourceFor.get(raw.id), body })
+  }
+
+  // 4. Optionally cluster same-event stories so they get synthesized into one article.
+  let groups: number[][]
+  if (settings.mergeSimilarStories && enriched.length > 1) {
+    onStatus({ refreshing: true, message: 'Detecting duplicate coverage…' })
+    groups = await clusterHeadlines(
+      enriched.map((e, index) => ({ index, source: e.raw.source, headline: e.raw.rssTitle })),
+      settings,
+    )
+  } else {
+    groups = enriched.map((_, index) => [index])
+  }
+
+  // 5. Refactor singletons / synthesize multi-source clusters.
+  const refactored: Article[] = []
+  for (let g = 0; g < groups.length; g++) {
+    const group = groups[g]
+    const members = group.map((idx) => enriched[idx]).filter(Boolean)
+    if (members.length === 0) continue
+
+    // Primary (most recent) member drives id, url, timestamp.
+    const primary = members
+      .slice()
+      .sort((a, b) => new Date(b.raw.publishedAt).getTime() - new Date(a.raw.publishedAt).getTime())[0]
+    const hint = primary.src?.defaultCategory
+    const sources: ArticleSource[] = members.map((m) => ({ name: m.raw.source, url: m.raw.sourceUrl }))
+
+    onStatus({
+      refreshing: true,
+      message: members.length > 1
+        ? `Synthesizing ${g + 1}/${groups.length} from ${members.length} sources…`
+        : `Refactoring ${g + 1}/${groups.length}: ${primary.raw.source}`,
+    })
 
     try {
-      const result = await refactorArticle(raw.rssTitle, body, settings, src?.defaultCategory)
+      const result = members.length > 1
+        ? await synthesizeCluster(
+            members.map((m) => ({ source: m.raw.source, title: m.raw.rssTitle, body: m.body })),
+            settings,
+            hint,
+          )
+        : await refactorArticle(primary.raw.rssTitle, primary.body, settings, hint)
+
       refactored.push({
-        id: raw.id,
+        id: primary.raw.id,
         category: result.category,
-        headline: result.headline || raw.rssTitle,
-        summary: result.summary || body.slice(0, 600),
-        source: raw.source,
-        sourceUrl: raw.sourceUrl,
-        time: relativeTime(raw.publishedAt),
-        publishedAt: raw.publishedAt,
-        minutes: estimateReadTime(result.summary || body),
+        headline: result.headline || primary.raw.rssTitle,
+        summary: result.summary || primary.body.slice(0, 600),
+        source: primary.raw.source,
+        sourceUrl: primary.raw.sourceUrl,
+        sources,
+        time: relativeTime(primary.raw.publishedAt),
+        publishedAt: primary.raw.publishedAt,
+        minutes: estimateReadTime(result.summary || primary.body),
         topics: [],
         read: false,
         saved: false,
       })
     } catch (err) {
-      console.error(`Refactor failed for "${raw.rssTitle}":`, err)
-      // Keep raw item with default category so the user still sees something
+      console.error(`Refactor failed for "${primary.raw.rssTitle}":`, err)
       refactored.push({
-        id: raw.id,
-        category: src?.defaultCategory ?? 'world',
-        headline: raw.rssTitle,
-        summary: body.slice(0, 800),
-        source: raw.source,
-        sourceUrl: raw.sourceUrl,
-        time: relativeTime(raw.publishedAt),
-        publishedAt: raw.publishedAt,
-        minutes: estimateReadTime(body),
+        id: primary.raw.id,
+        category: hint ?? 'world',
+        headline: primary.raw.rssTitle,
+        summary: primary.body.slice(0, 800),
+        source: primary.raw.source,
+        sourceUrl: primary.raw.sourceUrl,
+        sources,
+        time: relativeTime(primary.raw.publishedAt),
+        publishedAt: primary.raw.publishedAt,
+        minutes: estimateReadTime(primary.body),
         topics: [],
         read: false,
         saved: false,

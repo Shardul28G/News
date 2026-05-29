@@ -20,6 +20,7 @@ export default function SettingsModal({ settings, onClose, onSave, onResetSource
   const [sources, setSources] = useState<RssSource[]>(settings.sources)
   const [interval, setInterval] = useState(settings.refreshIntervalMinutes)
   const [maxArticles, setMaxArticles] = useState(settings.maxArticlesPerRefresh ?? 10)
+  const [mergeSimilar, setMergeSimilar] = useState(settings.mergeSimilarStories ?? true)
   const [provider, setProvider] = useState<LLMProvider>(settings.llmProvider)
   const [ollamaUrl, setOllamaUrl] = useState(settings.ollamaUrl)
   const [ollamaModel, setOllamaModel] = useState(settings.ollamaModel)
@@ -38,6 +39,7 @@ export default function SettingsModal({ settings, onClose, onSave, onResetSource
       strictness, sources, refreshIntervalMinutes: interval,
       llmProvider: provider, ollamaUrl, ollamaModel, geminiModel,
       maxArticlesPerRefresh: maxArticles,
+      mergeSimilarStories: mergeSimilar,
     })
     onClose()
   }
@@ -225,6 +227,26 @@ export default function SettingsModal({ settings, onClose, onSave, onResetSource
             <div style={{ fontSize: 11, color: colors.muted, marginTop: 6 }}>
               Higher = more news per refresh but each refresh takes longer (each article goes through the LLM).
             </div>
+          </section>
+
+          {/* Merge similar stories */}
+          <section>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox" checked={mergeSimilar}
+                onChange={() => setMergeSimilar((v) => !v)}
+                style={{ marginTop: 2, accentColor: colors.accent }}
+              />
+              <span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: colors.ink }}>
+                  Merge similar stories
+                </span>
+                <div style={{ fontSize: 11, color: colors.muted, marginTop: 4, lineHeight: 1.5 }}>
+                  Detect when several sources cover the same event and combine them into a single
+                  synthesized article that draws on all reports. Adds an extra LLM step per refresh.
+                </div>
+              </span>
+            </label>
           </section>
 
           {/* Sources */}

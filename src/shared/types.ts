@@ -15,13 +15,21 @@ export type Strictness = 'light' | 'medium' | 'aggressive';
 
 export type LLMProvider = 'gemini' | 'ollama';
 
+export interface ArticleSource {
+  name: string;
+  url: string;
+}
+
 export interface Article {
   id: string;
   category: ArticleCategory;
   headline: string;
   summary: string;
+  /** Primary source (first / most authoritative). */
   source: string;
   sourceUrl: string;
+  /** All contributing sources when this story was synthesized from multiple feeds. */
+  sources?: ArticleSource[];
   time: string;
   publishedAt: string;
   minutes: number;
@@ -50,6 +58,8 @@ export interface Settings {
   geminiModel: string;
   /** How many new articles to refactor per refresh. Keeps LLM cost bounded. */
   maxArticlesPerRefresh: number;
+  /** When true, group same-event stories from different sources into one synthesized article. */
+  mergeSimilarStories: boolean;
 }
 
 export interface ElectronAPI {

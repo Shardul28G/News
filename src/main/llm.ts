@@ -161,7 +161,16 @@ async function runOllama(prompt: string, model: string, baseUrl: string): Promis
   return data.response ?? ''
 }
 
-// ───────────────── Public API ─────────────────
+// ───────────────── Shared runner ─────────────────
+
+async function runLLM(prompt: string, settings: Settings): Promise<string> {
+  if (settings.llmProvider === 'ollama') {
+    return runOllama(prompt, settings.ollamaModel, settings.ollamaUrl)
+  }
+  return runGeminiCLI(prompt, settings.geminiModel)
+}
+
+// ───────────────── Public API: refactor a single article ─────────────────
 
 export async function refactorArticle(
   title: string,
@@ -170,11 +179,136 @@ export async function refactorArticle(
   hintCategory?: ArticleCategory
 ): Promise<RefactorResult> {
   const prompt = buildPrompt(title, body, settings.strictness, hintCategory)
-  let raw: string
-  if (settings.llmProvider === 'ollama') {
-    raw = await runOllama(prompt, settings.ollamaModel, settings.ollamaUrl)
-  } else {
-    raw = await runGeminiCLI(prompt, settings.geminiModel)
+  const raw = await runLLM(prompt, settings)
+  return extractJSON(raw, hintCategory)
+}
+
+// ───────────────── Public API: cluster same-event stories ─────────────────
+
+export interface ClusterInput {
+  index: number
+  source: string
+  headline: string
+}
+
+/**
+ * Groups headlines that report the SAME underlying event. Returns an array of
+ * groups, each group being an array of input indices. Every index appears once.
+ * Falls back to all-singletons on any parsing failure (never throws).
+ */
+export async function clusterHeadlines(
+  items: ClusterInput[],
+  settings: Settings
+): Promise<number[][]> {
+  if (items.length <= 1) return items.map((it) => [it.index])
+
+  const list = items
+    .map((it) => `${it.index}. [${it.source}] ${it.headline}`)
+    .join('\n')
+
+  const prompt = `You are a news desk editor identifying duplicate coverage.
+
+Below is a numbered list of news headlines, each with its source in brackets.
+Group together the items that report THE SAME underlying news event or story
+(same incident, same announcement, same development) — even if the wording or
+angle differs. Items about different events must stay in separate groups.
+
+Be conservative: only group items you are confident describe the same event.
+When unsure, keep an item in its own group.
+
+Output ONLY valid JSON, no markdown, no commentary. Exact shape:
+{ "groups": [[0, 3], [1], [2, 4, 5]] }
+Rules: every index from 0 to ${items.length - 1} must appear EXACTLY ONCE across all groups.
+
+==== HEADLINES ====
+${list}
+==== END ====`
+
+  try {
+    const raw = await runLLM(prompt, settings)
+    const cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim()
+    const match = cleaned.match(/\{[\s\S]*\}/)
+    if (!match) throw new Error('no json')
+    const parsed = JSON.parse(match[0]) as { groups?: number[][] }
+    const groups = Array.isArray(parsed.groups) ? parsed.groups : []
+
+    // Validate: collect seen indices, drop invalid, add any missing as singletons.
+    const validIndices = new Set(items.map((it) => it.index))
+    const seen = new Set<number>()
+    const result: number[][] = []
+    for (const g of groups) {
+      const clean = g.filter((i) => validIndices.has(i) && !seen.has(i))
+      clean.forEach((i) => seen.add(i))
+      if (clean.length > 0) result.push(clean)
+    }
+    // Any index the model forgot becomes its own group.
+    for (const it of items) {
+      if (!seen.has(it.index)) result.push([it.index])
+    }
+    return result
+  } catch (err) {
+    console.error('clusterHeadlines failed, using singletons:', err)
+    return items.map((it) => [it.index])
   }
+}
+
+// ───────────────── Public API: synthesize a multi-source story ─────────────────
+
+export interface SynthesisInput {
+  source: string
+  title: string
+  body: string
+}
+
+/**
+ * Combines several reports of the same event into one neutral article that
+ * draws on all sources. Returns the same shape as refactorArticle.
+ */
+export async function synthesizeCluster(
+  reports: SynthesisInput[],
+  settings: Settings,
+  hintCategory?: ArticleCategory
+): Promise<RefactorResult> {
+  const rules = SYSTEM_RULES[settings.strictness]
+  const categoryList = CATEGORIES.join(' | ')
+  const sourceNames = reports.map((r) => r.source).join(', ')
+
+  const blocks = reports
+    .map(
+      (r, i) =>
+        `--- REPORT ${i + 1} (source: ${r.source}) ---\nHeadline: ${r.title}\n${r.body.slice(0, 1800)}`
+    )
+    .join('\n\n')
+
+  const hint = hintCategory
+    ? `If the topic is ambiguous, prefer the category "${hintCategory}".`
+    : ''
+
+  const prompt = `You are a calm, dry, wire-service news editor.
+
+Below are MULTIPLE independent reports of the SAME news event, from different
+publishers (${sourceNames}). Synthesize them into ONE neutral, factual article.
+
+Hard rules:
+- Combine the facts from all reports. Preserve all facts, figures, names, dates,
+  quotes, and attributions EXACTLY.
+- If reports disagree on a detail, state both and attribute (e.g. "Reuters reported X, while the BBC reported Y").
+- Do NOT invent anything not present in the reports.
+- ${rules}
+- Tone: dry, calm, factual. Past tense for completed events. Active voice.
+- The "summary" field MUST be 2 to 4 PARAGRAPHS separated by "\\n\\n" (a blank line between paragraphs). Total 150-280 words. Do NOT produce a one-liner.
+- The "headline" should be a single neutral sentence; no all-caps, no question marks, no exclamation marks.
+
+Then classify into exactly ONE category: ${categoryList}.
+${hint}
+
+Output ONLY valid JSON, no markdown, no commentary. Exact shape:
+{ "headline": "...", "summary": "para1\\n\\npara2\\n\\npara3", "category": "..." }
+
+==== REPORTS ====
+${blocks}
+==== END ====`
+
+  const raw = await runLLM(prompt, settings)
   return extractJSON(raw, hintCategory)
 }

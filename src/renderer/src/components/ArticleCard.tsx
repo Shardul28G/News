@@ -9,6 +9,7 @@ interface Props {
 
 export default function ArticleCard({ article, onClick }: Props): React.ReactElement {
   const grad = gradientCSS(article.category as CategoryKey)
+  const extraSources = (article.sources?.length ?? 0) - 1
   return (
     <button
       onClick={onClick}
@@ -35,6 +36,15 @@ export default function ArticleCard({ article, onClick }: Props): React.ReactEle
         }}>
           {article.source}
         </span>
+        {extraSources > 0 && (
+          <span style={{
+            fontSize: 9, padding: '1px 6px', borderRadius: 999,
+            background: colors.bg, border: `1px solid ${colors.rule}`,
+            color: colors.muted, fontWeight: 600, letterSpacing: 0.4,
+          }}>
+            +{extraSources} {extraSources === 1 ? 'source' : 'sources'}
+          </span>
+        )}
         <span>·</span>
         <span>{article.time}</span>
         <span style={{ marginLeft: 'auto', textTransform: 'capitalize' }}>{article.category}</span>

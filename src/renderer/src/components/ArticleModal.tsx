@@ -10,6 +10,10 @@ interface Props {
 
 export default function ArticleModal({ article, onClose, onOpenSource }: Props): React.ReactElement {
   const grad = gradientCSS(article.category as CategoryKey)
+  const allSources = article.sources && article.sources.length > 0
+    ? article.sources
+    : [{ name: article.source, url: article.sourceUrl }]
+  const isMulti = allSources.length > 1
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -80,7 +84,7 @@ export default function ArticleModal({ article, onClose, onOpenSource }: Props):
             fontSize: 11, color: colors.accent,
             fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1,
           }}>
-            {article.category} · {article.source}
+            {article.category} · {isMulti ? `${allSources.length} sources` : article.source}
           </div>
 
           {/* Headline */}
@@ -128,13 +132,46 @@ export default function ArticleModal({ article, onClose, onOpenSource }: Props):
             fontSize: 14, lineHeight: 1.65, color: colors.muted,
             marginTop: 14, textWrap: 'pretty' as never,
           }}>
-            This summary has been rewritten by Gemini to remove sensationalist phrasing and outrage framing
-            while preserving the underlying facts. The original wording lives at the publisher.
+            {isMulti
+              ? `This article was synthesized from ${allSources.length} independent reports to remove sensationalist phrasing and outrage framing while preserving the underlying facts. The original wording lives at each publisher.`
+              : 'This summary has been rewritten to remove sensationalist phrasing and outrage framing while preserving the underlying facts. The original wording lives at the publisher.'}
           </p>
+
+          {/* Sources */}
+          {isMulti && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 600, color: colors.muted,
+                textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8,
+              }}>
+                Sources
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {allSources.map((s, i) => (
+                  <button
+                    key={s.url + i}
+                    onClick={() => onOpenSource(s.url)}
+                    style={{
+                      all: 'unset', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', border: `1px solid ${colors.rule}`,
+                      borderRadius: 999, fontSize: 12, color: colors.ink,
+                      background: colors.bg, fontFamily: sans,
+                    }}
+                  >
+                    {s.name}
+                    <svg width="11" height="11" viewBox="0 0 12 12">
+                      <path d="M3 9L9 3M9 3H4M9 3V8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* CTA */}
           <button
-            onClick={() => onOpenSource(article.sourceUrl)}
+            onClick={() => onOpenSource(allSources[0].url)}
             style={{
               all: 'unset', cursor: 'pointer',
               marginTop: 22, display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -142,7 +179,7 @@ export default function ArticleModal({ article, onClose, onOpenSource }: Props):
               borderRadius: 8, fontSize: 13, fontWeight: 600, fontFamily: sans,
             }}
           >
-            Open at {article.source}
+            Open at {allSources[0].name}
             <svg width="12" height="12" viewBox="0 0 12 12">
               <path d="M3 9L9 3M9 3H4M9 3V8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS: Settings = {
   ollamaModel: 'gemma4:e2b',
   geminiModel: 'gemini-2.5-flash',
   maxArticlesPerRefresh: 10,
+  mergeSimilarStories: true,
 }
 
 function readJSON<T>(file: string, fallback: T): T {
